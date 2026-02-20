@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PET Dashboard V15 - Full Tracking & Security</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', sans-serif; }
+        .navbar { background-color: #1a252f; border-bottom: 4px solid #3498db; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .nav-pills .nav-link.active { background-color: #3498db; }
+        .header-title { color: white; font-weight: bold; }
+        .live-box { background: #fffde7; padding: 12px; border-radius: 8px; border: 1px solid #ffe082; margin-bottom: 15px; }
+        .loss-label { font-size: 0.7rem; font-weight: bold; color: #555; display: block; margin-bottom: 2px; }
+        .table-responsive { max-height: 400px; font-size: 0.82rem; }
+        .loss-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+        .loss-value { font-weight: bold; color: #e74c3c; }
+        .filter-pane { background: white; padding: 15px; border-radius: 12px; border: 1px solid #dee2e6; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+
+<!-- MODAL DE SÉCURITÉ -->
+<div class="modal fade" id="authModal" data-bs-backdrop="static" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content shadow-lg">
+      <div class="modal-header bg-primary text-white text-center"><h5 class="modal-title w-100">ACCÈS SÉCURISÉ</h5></div>
+      <div class="modal-body text-center p-4">
+        <label class="mb-2 fw-bold">Entrez le code d'accès :</label>
+        <input type="password" id="modalPassInput" class="form-control form-control-lg text-center" placeholder="****">
+        <div id="authError" class="text-danger mt-2 fw-bold" style="display:none;">❌ Code incorrect !</div>
+      </div>
+      <div class="modal-footer justify-content-center border-0">
+        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Annuler</button>
+        <button type="button" class="btn btn-primary px-5 fw-bold" onclick="confirmAuth()">VALIDER</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<nav class="navbar mb-4"><div class="container text-center"><h3 class="header-title w-100 m-0">Reporting PET - Contrôle Total</h3></div></nav>
+
+<div class="container-fluid px-4">
+    <ul class="nav nav-pills mb-4 justify-content-center">
+        <li class="nav-item"><button class="nav-link active fw-bold" id="tab-dash-btn" data-bs-toggle="pill" data-bs-target="#dash">TABLEAU DE BORD</button></li>
+        <li class="nav-item ms-3"><button class="nav-link fw-bold text-dark border" onclick="launchAuth('CONFIG')">⚙️ CONFIGURATION 🔒</button>
+            <button class="d-none" id="real-tab-config" data-bs-toggle="pill" data-bs-target="#config"></button>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <div class="tab-pane fade show active" id="dash">
+            <div class="row">
+                <!-- FORMULAIRE (GAUCHE) -->
+                <div class="col-xl-3 col-lg-4">
+                    <div class="card p-4 shadow-sm border-top border-primary border-4">
+                        <form id="prodForm">
+                            <h6 class="text-primary mb-3 border-bottom pb-2">SAISIE DU RAPPORT</h6>
+                            <div class="mb-2"><label class="small fw-bold">Date</label><input type="date" id="inDate" class="form-control" required oninput="calculateLive()"></div>
+                            <div class="mb-2"><label class="small fw-bold">Ligne</label><select id="inLine" class="form-select" oninput="calculateLive()"><option value="CSD">CSD</option><option value="WATER">WATER</option></select></div>
+                            <div class="mb-2"><label class="small fw-bold">Produit</label><input list="pList" id="inProd" class="form-control" placeholder="Produit..." required oninput="calculateLive()"><datalist id="pList"></datalist></div>
+                            <div class="row g-2 mb-3">
+                                <div class="col-6"><label class="small fw-bold">Packs</label><input type="number" id="inPacks" class="form-control" required oninput="calculateLive()"></div>
+                                <div class="col-6"><label class="small fw-bold">Cons. Réelle</label><input type="number" id="inReal" class="form-control" step="0.001" required oninput="calculateLive()"></div>
+                            </div>
+
+                            <div class="live-box shadow-sm text-center">
+                                <div class="d-flex justify-content-between small"><span>Écart Total:</span> <span id="liveEcart" class="fw-bold">0.00</span></div>
+                                <div class="d-flex justify-content-between mt-1 pt-1 border-top"><span class="fw-bold">Reste Inexpliqué:</span> <span id="liveRemaining" class="fw-bold text-danger">0.00</span></div>
+                            </div>
+                            
+                            <h6 class="small fw-bold text-danger border-bottom pb-1">PERTES PAR MACHINE</h6>
+                            <div class="row g-1">
+                                <div class="col-6"><label class="loss-label">Pref. Souf</label><input type="number" id="p_ps" class="form-control form-control-sm" value="0" oninput="calculateLive()"></div>
+                                <div class="col-6"><label class="loss-label">Bout. Souf</label><input type="number" id="p_bs" class="form-control form-control-sm" value="0" oninput="calculateLive()"></div>
+                                <div class="col-6"><label class="loss-label">Bout. Rinc</label><input type="number" id="p_br" class="form-control form-control-sm" value="0" oninput="calculateLive()"></div>
+                                <div class="col-6"><label class="loss-label">Bout. Sout</label><input type="number" id="p_bt" class="form-control form-control-sm" value="0" oninput="calculateLive()"></div>
+                                <div class="col-6"><label class="loss-label">Mal Remp</label><input type="number" id="p_mr" class="form-control form-control-sm" value="0" oninput="calculateLive()"></div>
+                                <div class="col-6"><label class="loss-label">Labo/Autre</label><input type="number" id="p_la" class="form-control form-control-sm" value="0" oninput="calculateLive()"></div>
+                            </div>
+                            <button type="button" class="btn btn-primary w-100 fw-bold mt-4 shadow" onclick="launchAuth('SAVE')">ENREGISTRER LE RAPPORT</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- CENTRE: FILTRES + CHART + TABLE -->
+                <div class="col-xl-6 col-lg-8">
+                    <div class="filter-pane shadow-sm">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-md-3"><label class="small fw-bold">Ligne</label><select id="fLine" class="form-select form-select-sm" onchange="refreshUI()"><option value="ALL">TOUTES</option><option value="CSD">CSD</option><option value="WATER">WATER</option></select></div>
+                            <div class="col-md-3"><label class="small fw-bold">Période</label><select id="fType" class="form-select form-select-sm" onchange="updateFilterInputs()"><option value="last">15 Derniers</option><option value="day">Par Jour</option><option value="month">Par Mois</option><option value="year">Par Année</option></select></div>
+                            <div class="col-md-4" id="fInputContainer"></div>
+                            <div class="col-md-2"><button class="btn btn-primary btn-sm w-100 fw-bold" onclick="refreshUI()">Filtrer</button></div>
+                        </div>
+                    </div>
+
+                    <div class="card p-3 shadow-sm" style="height: 300px;"><canvas id="yieldChart"></canvas></div>
+
+                    <div class="card p-3 shadow-sm">
+                        <div class="table-responsive">
+                            <table class="table table-hover text-center align-middle border">
+                                <thead class="table-dark"><tr><th>Date</th><th>Ligne</th><th>Packs</th><th>Théo</th><th>Réel</th><th>Yield%</th><th>Pertes</th><th>X</th></tr></thead>
+                                <tbody id="historyBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DROITE: STATISTIQUES -->
+                <div class="col-xl-3 col-lg-12">
+                    <div class="card p-3 bg-danger text-white mb-3 shadow text-center"><h6>CUMUL DES PERTES</h6><h2 class="m-0 fw-bold" id="totalLosses">0</h2><small id="periodLabel">Total période</small></div>
+                    <div class="card p-3 shadow-sm mb-3">
+                        <h6 class="fw-bold border-bottom pb-2 text-secondary small">DÉTAIL PAR MACHINE (Unités)</h6>
+                        <div class="loss-item"><span>Pref. Souffleuse</span> <span class="loss-value" id="s_ps">0</span></div>
+                        <div class="loss-item"><span>Bout. Souffleuse</span> <span class="loss-value" id="s_bs">0</span></div>
+                        <div class="loss-item"><span>Bout. Rinceuses</span> <span class="loss-value" id="s_br">0</span></div>
+                        <div class="loss-item"><span>Bout. Soutireuse</span> <span class="loss-value" id="s_bt">0</span></div>
+                        <div class="loss-item"><span>Mal Remplis</span> <span class="loss-value" id="s_mr">0</span></div>
+                        <div class="loss-item"><span>Labo et Autre</span> <span class="loss-value" id="s_la">0</span></div>
+                    </div>
+                    <div class="card p-3 shadow-sm bg-light text-center border-start border-5 border-success"><h6>RENDEMENT MOYEN</h6><h3 class="text-success fw-bold m-0" id="avgYield">0%</h3></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONFIG -->
+        <div class="tab-pane fade" id="config">
+            <div class="card p-4 shadow-sm">
+                <h5 class="mb-4 border-bottom pb-2">Paramètres du Système</h5>
+                <div class="row mb-4 p-3 bg-light rounded border align-items-end">
+                    <div class="col-md-4"><label class="fw-bold small">Changer le Code d'accès</label><input type="password" id="newPass" class="form-control" placeholder="Nouveau code"></div>
+                    <div class="col-md-3"><button class="btn btn-warning w-100 fw-bold" onclick="updatePass()">Mettre à jour</button></div>
+                </div>
+                <h6>Coefficients des Produits</h6>
+                <div class="table-responsive border rounded">
+                    <table class="table table-sm table-striped text-center mb-0"><thead class="table-dark sticky-top"><tr><th>Produit</th><th>Coefficient / Pack</th></tr></thead><tbody id="configBody"></tbody></table>
+                </div>
+                <button class="btn btn-success mt-4 px-5 fw-bold" onclick="saveCoeffs()">SAUVEGARDER LES COEFFICIENTS</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let pendingAction = null, pendingData = null;
+    let appPass = localStorage.getItem('pet_app_pwd') || "0000";
+    let productNames = ["CCZ Pet 0,45 L*12", "CC.LGH Pet 2/2*8 PF", "CC.ZE Pet 2/2*4 PF", "CC.ZE Pet 1/2*12", "CC.ZE Pet 2/2*8 PF", "CC.ZE Pet 1/4*18", "CC Pet 1,3 L*6", "CC Pet 2/2*4 PF", "CC Pet 1/4*18", "CC Pet 1/2*12", "CC Pet 2/2*8 PF", "CC Pet 3/2*6", "CC Pet 0,45 L*12", "CC Pet 1,7 L*6", "CC Pet 4/2*6", "SP Pet 1/4*18", "SP Pet 1/2*12", "SP Pet 2/2*8 PF", "FO Pet 1/4*18", "FO Pet 1/2*12", "FO Pet 2/2*8 PF", "FO Pet 3/2*6", "FO Pet 1,7*6 PF", "FP Pet 1,7*6 PF", "FO Pet 4/2*6", "FPM Pet 1/4*18", "FPM Pet 1/2*12", "FPM Pet 2/2*8 PF", "FPM Pet 5/4*8 PF", "FPM Pet 3/2*6", "FL Pet 1/4*18", "FL Pet 1/2*12", "FL Pet 2/2*8 PF", "FL Pet 1,7*6 PF", "FL Pet 3/2*6", "FB Pet 1/2*12", "FB Pet 2/2*8 PF", "FB Pet 5/4*8 PF", "FB Pet 3/2*6", "SH.CI Pet 1/2*12", "SH.CI Pet 0,45 L*12", "SH.CI Pet 2/2*8 PF", "SH.CI Pet 1,3 L*6", "SH.CI Pet 3/2*6", "SH.OR Pet 1/2*12", "SH.OR Pet 2/2*8 PF", "HT Pet 2/2*4 PF", "HT Pet 1/4*18", "HT Pet 1/2*12", "HT Pet 0,45 L*12", "HT Pet 2/2*8 PF", "HT Pet 1,3 L*6", "HT Pet 3/2*6", "HFP Pet 1/2*12", "HFP Pet 2/2*8 PF", "HFP Pet 3/2*6", "HA Pet 1/4*18", "HA Pet 0,45*12", "HA Pet 1/2*12", "HA Pet 2/2*8 PF", "HA Pet 1,3*6", "HA Pet 3/2*6", "PM Pet 1/4*18", "PM Pet 1/2*12", "PM Pet 0,45 L*12", "PM Pet 2/2*8 PF", "PM Pet 1,3 L*6", "PM Pet 3/2*6", "SH.TO Pet 1/2*12", "SH.TO Pet 0,45 L*12", "SH.TO Pet 2/2*8 PF", "FGR Pet 1/4*18", "HPC Pet 1/2*12", "HPC Pet 2/2*8", "Ciel 33*12", "Ciel 1/2*12", "Ciel 3/2*6", "Ciel 3/2*8", "Ciel 4/2*6"];
+    let prods = JSON.parse(localStorage.getItem('pet_v15_prods')) || productNames.map(n => ({ name: n, coeff: 1.0 }));
+    let hist = JSON.parse(localStorage.getItem('pet_v15_hist')) || [];
+    let chart;
+
+    // --- SÉCURITÉ ---
+    function launchAuth(action, data = null) {
+        pendingAction = action; pendingData = data;
+        document.getElementById('modalPassInput').value = ""; document.getElementById('authError').style.display = "none";
+        new bootstrap.Modal(document.getElementById('authModal')).show();
+    }
+    function confirmAuth() {
+        if (document.getElementById('modalPassInput').value === appPass) {
+            bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
+            if (pendingAction === 'SAVE') saveReport();
+            if (pendingAction === 'DELETE') deleteEntry(pendingData);
+            if (pendingAction === 'CONFIG') new bootstrap.Tab(document.getElementById('real-tab-config')).show();
+        } else document.getElementById('authError').style.display = "block";
+    }
+    function updatePass() {
+        const p = document.getElementById('newPass').value; if(p.length<4) return alert("Min 4 car.");
+        localStorage.setItem('pet_app_pwd', p); appPass = p; alert("Mis à jour!");
+    }
+
+    // --- FILTRES ZONES ---
+    function updateFilterInputs() {
+        const type = document.getElementById('fType').value, cont = document.getElementById('fInputContainer');
+        cont.innerHTML = '';
+        if(type==='day') cont.innerHTML = '<input type="date" id="fVal" class="form-control form-control-sm">';
+        if(type==='month') cont.innerHTML = '<input type="month" id="fVal" class="form-control form-control-sm">';
+        if(type==='year') cont.innerHTML = '<input type="number" id="fVal" class="form-control form-control-sm" placeholder="2024">';
+        refreshUI();
+    }
+
+    // --- CALCULS & UI ---
+    function calculateLive() {
+        const pName = document.getElementById('inProd').value, packs = parseFloat(document.getElementById('inPacks').value)||0, real = parseFloat(document.getElementById('inReal').value)||0;
+        const prd = prods.find(x => x.name === pName); const theo = prd ? packs * prd.coeff : 0;
+        const loss = (parseFloat(document.getElementById('p_ps').value)||0)+(parseFloat(document.getElementById('p_bs').value)||0)+(parseFloat(document.getElementById('p_br').value)||0)+(parseFloat(document.getElementById('p_bt').value)||0)+(parseFloat(document.getElementById('p_mr').value)||0)+(parseFloat(document.getElementById('p_la').value)||0);
+        document.getElementById('liveEcart').innerText = (real - theo).toFixed(2);
+        document.getElementById('liveRemaining').innerText = (real - theo - loss).toFixed(2);
+    }
+
+    function saveReport() {
+        const pName = document.getElementById('inProd').value, prd = prods.find(x => x.name === pName);
+        if(!prd) return alert("Produit Invalide");
+        const ps=parseInt(document.getElementById('p_ps').value)||0, bs=parseInt(document.getElementById('p_bs').value)||0, br=parseInt(document.getElementById('p_br').value)||0, bt=parseInt(document.getElementById('p_bt').value)||0, mr=parseInt(document.getElementById('p_mr').value)||0, la=parseInt(document.getElementById('p_la').value)||0;
+        const packs=parseFloat(document.getElementById('inPacks').value), real=parseFloat(document.getElementById('inReal').value), theo=packs*prd.coeff;
+        hist.push({ id:Date.now(), date:document.getElementById('inDate').value, line:document.getElementById('inLine').value, prodName:pName, packs, theo, real, yieldVal:((theo/real)*100).toFixed(1), ps, bs, br, bt, mr, la, total:ps+bs+br+bt+mr+la });
+        localStorage.setItem('pet_v15_hist', JSON.stringify(hist)); document.getElementById('prodForm').reset(); calculateLive(); refreshUI();
+    }
+
+    function refreshUI() {
+        const line = document.getElementById('fLine').value, type = document.getElementById('fType').value, val = document.getElementById('fVal')?.value;
+        let filtered = line==='ALL' ? hist : hist.filter(h => h.line === line);
+        if(type==='day' && val) filtered = filtered.filter(h => h.date === val);
+        else if(type==='month' && val) filtered = filtered.filter(h => h.date.startsWith(val));
+        else if(type==='year' && val) filtered = filtered.filter(h => h.date.startsWith(val));
+        else if(type==='last') filtered = filtered.slice(-15);
+
+        let sT=0, sPs=0, sBs=0, sBr=0, sBt=0, sMr=0, sLa=0, sY=0;
+        filtered.forEach(h => { sT+=h.total; sPs+=h.ps; sBs+=h.bs; sBr+=h.br; sBt+=h.bt; sMr+=h.mr; sLa+=h.la; sY+=parseFloat(h.yieldVal); });
+        
+        document.getElementById('totalLosses').innerText = sT.toLocaleString();
+        document.getElementById('s_ps').innerText = sPs.toLocaleString(); document.getElementById('s_bs').innerText = sBs.toLocaleString();
+        document.getElementById('s_br').innerText = sBr.toLocaleString(); document.getElementById('s_bt').innerText = sBt.toLocaleString();
+        document.getElementById('s_mr').innerText = sMr.toLocaleString(); document.getElementById('s_la').innerText = sLa.toLocaleString();
+        document.getElementById('avgYield').innerText = filtered.length ? (sY/filtered.length).toFixed(1)+"%" : "0%";
+
+        const body = document.getElementById('historyBody'); body.innerHTML = '';
+        filtered.slice().reverse().forEach(h => {
+            body.innerHTML += `<tr><td>${h.date}</td><td>${h.line}</td><td>${h.packs}</td><td>${h.theo.toFixed(2)}</td><td>${h.real.toFixed(2)}</td><td class="fw-bold ${h.yieldVal>=100?'text-success':'text-danger'}">${h.yieldVal}%</td><td class="text-danger fw-bold">${h.total}</td><td><button onclick="launchAuth('DELETE', ${h.id})" class="btn btn-sm btn-light py-0">🗑️</button></td></tr>`;
+        });
+        updateChart(filtered);
+    }
+
+    function updateChart(data) {
+        const ctx = document.getElementById('yieldChart').getContext('2d');
+        if (chart) chart.destroy();
+        chart = new Chart(ctx, { type: 'bar', data: { labels: data.map(d => d.date), datasets: [{ label: 'Yield %', data: data.map(d => d.yieldVal), backgroundColor: '#3498db' }] }, options: { maintainAspectRatio: false } });
+    }
+
+    function deleteEntry(id) { hist = hist.filter(h => h.id !== id); localStorage.setItem('pet_v15_hist', JSON.stringify(hist)); refreshUI(); }
+    function saveCoeffs() { document.querySelectorAll('.config-val').forEach(i => { prods[i.dataset.idx].coeff = parseFloat(i.value)||0; }); localStorage.setItem('pet_v15_prods', JSON.stringify(prods)); alert('Ok!'); init(); }
+
+    function init() {
+        const pList = document.getElementById('pList'); pList.innerHTML = ''; prods.forEach(p => { pList.innerHTML += `<option value="${p.name}">`; });
+        const configBody = document.getElementById('configBody'); configBody.innerHTML = '';
+        prods.forEach((p, idx) => { configBody.innerHTML += `<tr><td class="text-start small">${p.name}</td><td><input type="number" step="0.0001" class="form-control form-control-sm config-val" data-idx="${idx}" value="${p.coeff}"></td></tr>`; });
+        updateFilterInputs();
+    }
+    window.onload = init;
+</script>
+</body>
+</html>
